@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -21,6 +22,7 @@ type inboundReq struct {
 	Tag              string          `json:"tag"`
 	ListenPort       int             `json:"listen_port"`
 	SubscriptionPort *int            `json:"subscription_port"`
+	NodeName         *string         `json:"node_name"`
 	Settings         json.RawMessage `json:"settings"`
 	Remark           *string         `json:"remark"`
 	Enabled          *bool           `json:"enabled"`
@@ -33,6 +35,13 @@ func (req inboundReq) applySubscriptionOptions(ib *model.Inbound) error {
 			return errors.New("订阅连接端口必须在 1–65535 之间，留空使用监听端口")
 		}
 		ib.SubscriptionPort = port
+	}
+	if req.NodeName != nil {
+		name := strings.TrimSpace(*req.NodeName)
+		if strings.ContainsAny(name, "\r\n\t") || utf8.RuneCountInString(name) > 128 {
+			return errors.New("节点名称不能超过 128 个字符，且不能包含换行或制表符")
+		}
+		ib.NodeName = name
 	}
 	return nil
 }
@@ -322,7 +331,7 @@ func (a *App) updateInbound(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if req.SubscriptionPort != nil && ib.Tag == previous.Tag && ib.ListenPort == previous.ListenPort &&
+	if (req.SubscriptionPort != nil || req.NodeName != nil) && ib.Tag == previous.Tag && ib.ListenPort == previous.ListenPort &&
 		ib.Enabled == previous.Enabled && bytes.Equal(ib.Settings, previous.Settings) {
 		c.JSON(http.StatusOK, gin.H{"inbound": ib})
 		return

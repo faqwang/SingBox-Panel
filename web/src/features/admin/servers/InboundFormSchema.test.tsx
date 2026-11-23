@@ -40,31 +40,40 @@ afterEach(() => {
 })
 
 describe('InboundForm JSON Schema integration', () => {
-  it('keeps the subscription connection port separate from native JSON', async () => {
+  it('keeps subscription options separate from native JSON', async () => {
     const inbound: Inbound = {
-      id: 1, server_id: 1, type: 'socks', tag: 'socks-in', listen_port: 1080, subscription_port: 443,
+      id: 1, server_id: 1, type: 'socks', tag: 'socks-in', listen_port: 1080, subscription_port: 443, node_name: '入口',
       enabled: true, remark: '', settings: {}, created_at: '', updated_at: '',
     }
     render(<InboundForm serverId={1} inbound={inbound} open onClose={vi.fn()} onSaved={vi.fn()} />)
 
     const connectionPort = () => screen.getByLabelText('订阅连接端口') as HTMLInputElement
+    const nodeName = () => screen.getByLabelText('节点名称') as HTMLInputElement
     expect(connectionPort().value).toBe('443')
+    expect(nodeName().value).toBe('入口')
     fireEvent.change(connectionPort(), { target: { value: '8443' } })
+    fireEvent.change(nodeName(), { target: { value: '新入口' } })
     fireEvent.click(screen.getByRole('radio', { name: 'JSON' }))
     const editor = await screen.findByLabelText('inbound.json') as HTMLTextAreaElement
-    expect(JSON.parse(editor.value)).toMatchObject({ listen_port: 1080 })
-    expect(JSON.parse(editor.value)).not.toHaveProperty('subscription_port')
+    const native = JSON.parse(editor.value)
+    expect(native).toMatchObject({ listen_port: 1080 })
+    expect(native).not.toHaveProperty('subscription_port')
+    expect(native).not.toHaveProperty('node_name')
     expect(connectionPort().value).toBe('8443')
+    expect(nodeName().value).toBe('新入口')
     fireEvent.click(screen.getByRole('radio', { name: 'Form' }))
     expect(connectionPort().value).toBe('8443')
+    expect(nodeName().value).toBe('新入口')
 
     fireEvent.change(connectionPort(), { target: { value: '' } })
+    fireEvent.change(nodeName(), { target: { value: '' } })
     fireEvent.click(screen.getByRole('radio', { name: 'JSON' }))
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(updateInbound).toHaveBeenCalledOnce())
     const body = vi.mocked(updateInbound).mock.calls[0][2]
-    expect(body).toMatchObject({ listen_port: 1080, subscription_port: 0 })
+    expect(body).toMatchObject({ listen_port: 1080, subscription_port: 0, node_name: '' })
     expect(body.settings?.raw).not.toHaveProperty('subscription_port')
+    expect(body.settings?.raw).not.toHaveProperty('node_name')
   })
 
   it('preserves complex raw fields (grpc, tls.min_version, multiplex, tcp_fast_open) when editing in Schema 表单 mode', async () => {

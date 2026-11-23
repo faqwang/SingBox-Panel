@@ -19,13 +19,15 @@ func regionFromName(name string) string {
 	return ""
 }
 
-// nameServerNodes names the panel-managed nodes one server contributes to a
-// node list. A server's only node is named after the server alone; the protocol
-// (or a custom inbound tag) is appended only when the same server contributes
-// several nodes, so those entries stay distinguishable.
+// nameServerNodes supplies names for inbounds without a configured node name.
+// A server's only node uses the server name. When it contributes several nodes,
+// the protocol or custom inbound tag distinguishes them.
 func nameServerNodes(serverName string, nodes []node) {
 	serverName = strings.TrimSpace(serverName)
 	for i := range nodes {
+		if nodes[i].name != "" {
+			continue
+		}
 		if len(nodes) == 1 && serverName != "" {
 			nodes[i].name = serverName
 			continue

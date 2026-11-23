@@ -297,7 +297,8 @@ type Inbound struct {
 	Settings   JSONText    `gorm:"type:text" json:"settings"`
 	Remark     string      `gorm:"size:255" json:"remark"`
 
-	SubscriptionPort int `gorm:"not null;default:0" json:"subscription_port,omitempty"`
+	SubscriptionPort int    `gorm:"not null;default:0" json:"subscription_port,omitempty"`
+	NodeName         string `gorm:"size:128;not null;default:''" json:"node_name,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

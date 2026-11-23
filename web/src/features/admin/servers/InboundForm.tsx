@@ -565,6 +565,7 @@ export default function InboundForm({
     form.setFieldsValue({
       ...(prefill ?? toForm(inbound)),
       subscription_port: inbound?.subscription_port || null,
+      node_name: inbound?.node_name ?? '',
     })
     const initialRaw = cloneJson((inbound?.settings?.raw ?? {}) as Record<string, unknown>)
     setRawExtra(initialRaw)
@@ -705,9 +706,11 @@ export default function InboundForm({
         onPreview?.(body)
         return
       }
-      const subscriptionPort = v.subscription_port ?? 0
-      if (body.type !== 'tun' && subscriptionPort !== (inbound?.subscription_port ?? 0)) {
-        body.subscription_port = subscriptionPort
+      if (body.type !== 'tun') {
+        const subscriptionPort = v.subscription_port ?? 0
+        const nodeName = String(v.node_name ?? '').trim()
+        if (subscriptionPort !== (inbound?.subscription_port ?? 0)) body.subscription_port = subscriptionPort
+        if (nodeName !== (inbound?.node_name ?? '')) body.node_name = nodeName
       }
       const editing = inbound
       const saved = await applyWithToast(
@@ -734,9 +737,15 @@ export default function InboundForm({
   const jsonField = (key: string, value: unknown) => {
     if (form.getFieldValue(key) === undefined) form.setFieldValue(key, value)
   }
-  const subscriptionPortField = !preview && type !== 'tun' && (
+  const showSubscriptionOptions = !preview && type !== 'tun'
+  const subscriptionPortField = showSubscriptionOptions && (
     <Form.Item name="subscription_port" label="订阅连接端口">
       <InputNumber precision={0} min={1} max={65535} className="mono" placeholder="留空使用监听端口" />
+    </Form.Item>
+  )
+  const nodeNameField = showSubscriptionOptions && (
+    <Form.Item name="node_name" label="节点名称">
+      <Input maxLength={128} placeholder="留空沿用自动命名" />
     </Form.Item>
   )
 
@@ -765,6 +774,7 @@ export default function InboundForm({
       {editorMode === 'json' ? (
         <div className="fm-grid">
           {subscriptionPortField}
+          {nodeNameField}
           <div className="fm-full space-y-3">
             {jsonError && <Alert type="error" showIcon message={jsonError} />}
             <JsonCodeEditor
@@ -828,6 +838,7 @@ export default function InboundForm({
           <Form.Item name="tag" label="标签">
             <Input />
           </Form.Item>
+          {nodeNameField}
           {type === 'shadowsocks' && (
             <Form.Item
               name="method"

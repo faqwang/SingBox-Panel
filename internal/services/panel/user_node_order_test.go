@@ -94,7 +94,7 @@ func TestPerUserCustomNodeNameOverridesManagedAndSingleNodeDefaults(t *testing.T
 	if err := db.Create(&server).Error; err != nil {
 		t.Fatal(err)
 	}
-	ib := model.Inbound{ServerID: server.ID, Tag: "vless-in", Type: model.InboundVLESS, ListenPort: 21001, Enabled: true}
+	ib := model.Inbound{ServerID: server.ID, Tag: "vless-in", Type: model.InboundVLESS, ListenPort: 21001, NodeName: "香港入口", Enabled: true}
 	if err := db.Create(&ib).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestPerUserCustomNodeNameOverridesManagedAndSingleNodeDefaults(t *testing.T
 		t.Fatalf("alice nodes = %+v", aliceNodes)
 	}
 	bobNodes := app.gatherNodes(&userB)
-	if len(bobNodes) != 1 || bobNodes[0].name != "🇭🇰 香港主节点" || bobNodes[0].region != "HK" {
+	if len(bobNodes) != 1 || bobNodes[0].name != "香港入口" || bobNodes[0].region != "HK" {
 		t.Fatalf("bob nodes = %+v", bobNodes)
 	}
 

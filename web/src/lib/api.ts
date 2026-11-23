@@ -262,6 +262,7 @@ export interface InboundBody {
   tag?: string
   listen_port: number
   subscription_port?: number
+  node_name?: string
   settings?: InboundSettings
   remark?: string
   enabled?: boolean

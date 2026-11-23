@@ -51,17 +51,24 @@ func TestInitDBRecordsSchemaVersion(t *testing.T) {
 
 func TestInboundSubscriptionMigrationPreservesExistingInbounds(t *testing.T) {
 	db := testDB(t)
-	inbound := model.Inbound{Tag: "existing", Type: model.InboundSocks, ListenPort: 1080, Enabled: true}
+	srv := model.Server{
+		Name: "existing", AgentToken: "subscription-migration-agent", ConfigMode: model.ConfigModeRaw,
+		RawConfig: model.JSONText(`{"inbounds":[{"type":"socks","tag":"existing","listen":"::","listen_port":1080},{"type":"socks","tag":"extra","listen":"::","listen_port":1081}],"outbounds":[{"type":"direct","tag":"direct"}]}`),
+	}
+	mustCreate(t, db, &srv)
+	inbound := model.Inbound{ServerID: srv.ID, Tag: "existing", Type: model.InboundSocks, ListenPort: 1080, Enabled: true}
 	mustCreate(t, db, &inbound)
-	if err := db.Exec("ALTER TABLE inbounds DROP COLUMN subscription_port").Error; err != nil {
-		t.Fatal(err)
+	for _, column := range []string{"subscription_port", "node_name"} {
+		if err := db.Exec("ALTER TABLE inbounds DROP COLUMN " + column).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := db.AutoMigrate(&model.SchemaMigration{}); err != nil {
 		t.Fatal(err)
 	}
 	var applied []model.SchemaMigration
 	for _, migration := range applicationMigrations {
-		if migration.version < 44 {
+		if migration.version < 42 {
 			applied = append(applied, model.SchemaMigration{Version: migration.version, Name: migration.name, AppliedAt: time.Now()})
 		}
 	}
@@ -69,15 +76,17 @@ func TestInboundSubscriptionMigrationPreservesExistingInbounds(t *testing.T) {
 	if err := runSchemaMigrations(db, config.DatabaseConfig{Driver: "sqlite", SkipMigrationBackup: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !db.Migrator().HasColumn(&model.Inbound{}, "SubscriptionPort") {
-		t.Fatal("migration did not add the subscription port column")
-	}
-	var upgraded model.Inbound
-	if err := db.First(&upgraded, inbound.ID).Error; err != nil {
+	var upgraded []model.Inbound
+	if err := db.Where("server_id = ?", srv.ID).Order("id").Find(&upgraded).Error; err != nil {
 		t.Fatal(err)
 	}
-	if upgraded.Tag != inbound.Tag || upgraded.SubscriptionPort != 0 || upgraded.EffectiveSubscriptionPort() != inbound.ListenPort {
-		t.Fatalf("existing inbound lost its default port: %+v", upgraded)
+	if len(upgraded) != 2 || upgraded[0].ID != inbound.ID || upgraded[0].Tag != inbound.Tag || upgraded[1].Tag != "extra" {
+		t.Fatalf("inbounds after upgrade: %+v", upgraded)
+	}
+	for i, ib := range upgraded {
+		if ib.NodeName != "" || ib.SubscriptionPort != 0 || ib.EffectiveSubscriptionPort() != inbound.ListenPort+i {
+			t.Fatalf("inbound %q lost its defaults: %+v", ib.Tag, ib)
+		}
 	}
 }
 

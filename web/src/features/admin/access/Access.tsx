@@ -68,6 +68,7 @@ interface AccessNodeItem {
   id: number
   kind: AccessKind
   name: string
+  subscriptionName?: string
   serverId?: number
   serverName?: string
   detail: string
@@ -228,6 +229,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
         id: inbound.id,
         kind: 'managed' as const,
         name: inbound.tag || nodeTypeLabel[inbound.type] || inbound.type,
+        subscriptionName: inbound.node_name,
         serverId: server.id,
         serverName: server.name,
         detail: `${inboundConnectionHost(server, inbound.settings) || '-'}:${inbound.subscription_port || inbound.listen_port}`,
@@ -627,7 +629,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
           return nodeOrder.map((orderItem, index) => {
             const key = userNodeOrderKey(orderItem)
             const item = nodeItemMap.get(key)
-            const defaultName = item
+            const defaultName = item?.subscriptionName || (item
               ? (item.kind === 'managed' && item.serverName
                 ? formatManagedNodeDisplayName(
                   item.serverName,
@@ -636,7 +638,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
                   (item.serverId != null ? selectedManagedPerServer.get(item.serverId) : undefined) ?? 1,
                 )
                 : item.name)
-              : `节点 #${orderItem.node_id}`
+              : `节点 #${orderItem.node_id}`)
             const subtitle = item
               ? (item.kind === 'managed' && item.serverName
                 ? `${item.serverName} · ${item.name} · ${item.detail}`

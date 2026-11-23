@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/hann0w0/singbox-panel/internal/domain/model"
 )
 
-func TestInboundSubscriptionPort(t *testing.T) {
+func TestInboundSubscriptionOptions(t *testing.T) {
 	db := testDB(t)
 	server := model.Server{Name: "Edge", Address: "edge.example.com", AgentToken: "subscription-port-agent"}
 	mustCreate(t, db, &server)
@@ -27,7 +28,7 @@ func TestInboundSubscriptionPort(t *testing.T) {
 	router.GET("/sub/:token", app.handleSubscription)
 	serverPath := fmt.Sprintf("/servers/%d", server.ID)
 	res := serveJSONRequest(t, router, http.MethodPost, serverPath+"/inbounds",
-		`{"type":"socks","tag":"socks-in","listen_port":1080,"subscription_port":443}`)
+		`{"type":"socks","tag":"socks-in","listen_port":1080,"subscription_port":443,"node_name":"  Edge Premium  "}`)
 	if res.Code != http.StatusOK {
 		t.Fatalf("create inbound: %d %s", res.Code, res.Body)
 	}
@@ -45,20 +46,26 @@ func TestInboundSubscriptionPort(t *testing.T) {
 		return res.Body.String()
 	}
 	update(`{"subscription_port":65536}`, http.StatusBadRequest)
+	update(`{"node_name":"bad\nname"}`, http.StatusBadRequest)
 	update(`{"listen_port":1081}`, http.StatusOK)
 
-	checkPort := func(port int) {
+	checkNode := func(name string, port int) {
 		t.Helper()
-		for _, output := range []struct{ target, want string }{
-			{"links", fmt.Sprintf("socks5://edge.example.com:%d#Edge", port)},
-			{"sing-box", fmt.Sprintf(`"server_port": %d`, port)},
-			{"clash", fmt.Sprintf("port: %d", port)},
-			{"shadowrocket", fmt.Sprintf("port: %d", port)},
-			{"surge", fmt.Sprintf("Edge = socks5, edge.example.com, %d,", port)},
+		for _, output := range []struct {
+			target string
+			want   []string
+		}{
+			{"links", []string{fmt.Sprintf("socks5://edge.example.com:%d#%s", port, url.PathEscape(name))}},
+			{"sing-box", []string{fmt.Sprintf(`"server_port": %d`, port), fmt.Sprintf(`"tag": %q`, name)}},
+			{"clash", []string{fmt.Sprintf("port: %d", port), "name: " + name}},
+			{"shadowrocket", []string{fmt.Sprintf("port: %d", port), "name: " + name}},
+			{"surge", []string{fmt.Sprintf("%s = socks5, edge.example.com, %d,", name, port)}},
 		} {
 			res := serveJSONRequest(t, router, http.MethodGet, "/sub/"+user.SubToken+"?target="+output.target, "")
-			if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), output.want) {
-				t.Errorf("%s subscription: %d %s, want %q", output.target, res.Code, res.Body, output.want)
+			for _, want := range output.want {
+				if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), want) {
+					t.Errorf("%s subscription: %d %s, want %q", output.target, res.Code, res.Body, want)
+				}
 			}
 		}
 		res := serveJSONRequest(t, router, http.MethodGet, serverPath+"/node-formats", "")
@@ -66,11 +73,11 @@ func TestInboundSubscriptionPort(t *testing.T) {
 		if err := json.Unmarshal(res.Body.Bytes(), &exported); err != nil {
 			t.Fatal(err)
 		}
-		if res.Code != http.StatusOK || len(exported.Items) != 1 || exported.Items[0].Port != port {
-			t.Errorf("node export: %d %s, want port %d", res.Code, res.Body, port)
+		if res.Code != http.StatusOK || len(exported.Items) != 1 || exported.Items[0].Name != name || exported.Items[0].Port != port {
+			t.Errorf("node export: %d %s, want %q and port %d", res.Code, res.Body, name, port)
 		}
 	}
-	checkPort(443)
+	checkNode("Edge Premium", 443)
 	before, err := app.orch.BuildServerConfig(&server)
 	if err != nil {
 		t.Fatal(err)
@@ -81,12 +88,16 @@ func TestInboundSubscriptionPort(t *testing.T) {
 	if result := update(`{"subscription_port":0}`, http.StatusOK); strings.Contains(result, `"apply_state"`) {
 		t.Fatalf("subscription-only edit staged a server config: %s", result)
 	}
-	checkPort(1081)
+	checkNode("Edge Premium", 1081)
+	if result := update(`{"node_name":" "}`, http.StatusOK); strings.Contains(result, `"apply_state"`) {
+		t.Fatalf("subscription-only edit staged a server config: %s", result)
+	}
+	checkNode("Edge", 1081)
 	after, err := app.orch.BuildServerConfig(&server)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(before, after) {
-		t.Fatalf("changing subscription port modified the server config: %s", after)
+		t.Fatalf("changing subscription options modified the server config: %s", after)
 	}
 }

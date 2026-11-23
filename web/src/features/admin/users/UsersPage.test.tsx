@@ -162,10 +162,13 @@ describe('editing a selected user subscription', () => {
   })
 
   it('saves names and keyboard ordering for the target user, then reloads them', async () => {
+    vi.mocked(listServers).mockResolvedValue([{ ...server, inbounds: server.inbounds!.map((inbound) =>
+      inbound.id === 10 ? { ...inbound, node_name: 'Tokyo Edge' } : inbound,
+    ) }])
     const router = mount('/admin/users/2')
-    fireEvent.change(await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' }), { target: { value: 'My Tokyo' } })
+    fireEvent.change(await screen.findByRole('textbox', { name: '自定义 Tokyo Edge 的节点名称' }), { target: { value: 'My Tokyo' } })
     fireEvent.keyDown(screen.getByRole('button', { name: '调整第 1 个节点顺序' }), { key: 'ArrowDown' })
-    expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
+    expect(orderedNames()).toEqual(['Singapore', 'Tokyo Edge'])
     fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
     await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, {
       server_ids: [], inbound_ids: [10], custom_node_ids: [30],
@@ -176,9 +179,9 @@ describe('editing a selected user subscription', () => {
     fireEvent.click(screen.getByRole('link', { name: '返回用户' }))
     await screen.findByRole('button', { name: '新增用户' })
     await act(() => router.navigate('/admin/users/2'))
-    const input = await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' })
+    const input = await screen.findByRole('textbox', { name: '自定义 Tokyo Edge 的节点名称' })
     expect((input as HTMLInputElement).value).toBe('My Tokyo')
-    expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
+    expect(orderedNames()).toEqual(['Singapore', 'Tokyo Edge'])
   })
 
   it('keeps rename beside remove without move buttons, and retains keyboard sorting with safe boundaries', async () => {

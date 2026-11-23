@@ -359,6 +359,7 @@ export interface Inbound {
   type: InboundType
   listen_port: number
   subscription_port?: number
+  node_name?: string
   enabled: boolean
   settings: InboundSettings
   remark: string

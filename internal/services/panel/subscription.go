@@ -194,6 +194,7 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 					orderType: userNodeTypeManaged,
 					orderID:   ib.ID,
 					tag:       ib.Tag,
+					name:      ib.NodeName,
 					server:    host,
 					port:      ib.EffectiveSubscriptionPort(),
 					typ:       string(ib.Type),

@@ -408,7 +408,8 @@ func syncImportedInbounds(tx *gorm.DB, serverID uint, parsed []singbox.ParsedInb
 		}
 		if row == nil {
 			row = &model.Inbound{ServerID: serverID, Tag: in.Tag}
-			if err := tx.Create(row).Error; err != nil {
+			// The raw-config migration also imports inbounds before subscription columns exist.
+			if err := tx.Select("ServerID", "Tag").Create(row).Error; err != nil {
 				return err
 			}
 			byTag[in.Tag] = row
