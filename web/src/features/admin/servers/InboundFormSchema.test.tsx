@@ -20,6 +20,7 @@ vi.mock('../../../lib/configApply', () => ({
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
 
 beforeEach(() => {
+  vi.clearAllMocks()
   vi.stubGlobal('matchMedia', () => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
@@ -39,6 +40,33 @@ afterEach(() => {
 })
 
 describe('InboundForm JSON Schema integration', () => {
+  it('keeps the subscription connection port separate from native JSON', async () => {
+    const inbound: Inbound = {
+      id: 1, server_id: 1, type: 'socks', tag: 'socks-in', listen_port: 1080, subscription_port: 443,
+      enabled: true, remark: '', settings: {}, created_at: '', updated_at: '',
+    }
+    render(<InboundForm serverId={1} inbound={inbound} open onClose={vi.fn()} onSaved={vi.fn()} />)
+
+    const connectionPort = () => screen.getByLabelText('订阅连接端口') as HTMLInputElement
+    expect(connectionPort().value).toBe('443')
+    fireEvent.change(connectionPort(), { target: { value: '8443' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'JSON' }))
+    const editor = await screen.findByLabelText('inbound.json') as HTMLTextAreaElement
+    expect(JSON.parse(editor.value)).toMatchObject({ listen_port: 1080 })
+    expect(JSON.parse(editor.value)).not.toHaveProperty('subscription_port')
+    expect(connectionPort().value).toBe('8443')
+    fireEvent.click(screen.getByRole('radio', { name: 'Form' }))
+    expect(connectionPort().value).toBe('8443')
+
+    fireEvent.change(connectionPort(), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'JSON' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(updateInbound).toHaveBeenCalledOnce())
+    const body = vi.mocked(updateInbound).mock.calls[0][2]
+    expect(body).toMatchObject({ listen_port: 1080, subscription_port: 0 })
+    expect(body.settings?.raw).not.toHaveProperty('subscription_port')
+  })
+
   it('preserves complex raw fields (grpc, tls.min_version, multiplex, tcp_fast_open) when editing in Schema 表单 mode', async () => {
     const complexInbound: Inbound = {
       id: 9,

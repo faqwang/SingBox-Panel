@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,12 +17,24 @@ import (
 // ---------- inbounds ----------
 
 type inboundReq struct {
-	Type       string          `json:"type"`
-	Tag        string          `json:"tag"`
-	ListenPort int             `json:"listen_port"`
-	Settings   json.RawMessage `json:"settings"`
-	Remark     *string         `json:"remark"`
-	Enabled    *bool           `json:"enabled"`
+	Type             string          `json:"type"`
+	Tag              string          `json:"tag"`
+	ListenPort       int             `json:"listen_port"`
+	SubscriptionPort *int            `json:"subscription_port"`
+	Settings         json.RawMessage `json:"settings"`
+	Remark           *string         `json:"remark"`
+	Enabled          *bool           `json:"enabled"`
+}
+
+func (req inboundReq) applySubscriptionOptions(ib *model.Inbound) error {
+	if req.SubscriptionPort != nil {
+		port := *req.SubscriptionPort
+		if port < 0 || port > 65535 {
+			return errors.New("订阅连接端口必须在 1–65535 之间，留空使用监听端口")
+		}
+		ib.SubscriptionPort = port
+	}
+	return nil
 }
 
 func (a *App) listInbounds(c *gin.Context) {
@@ -119,6 +132,10 @@ func (a *App) createInbound(c *gin.Context) {
 		Remark:     remark,
 		Enabled:    enabled,
 	}
+	if err := req.applySubscriptionOptions(ib); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if err := a.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(ib).Error; err != nil {
 			return err
@@ -156,6 +173,11 @@ func (a *App) updateInbound(c *gin.Context) {
 	}
 	var req inboundReq
 	if !bindJSON(c, &req) {
+		return
+	}
+	previous := ib
+	if err := req.applySubscriptionOptions(&ib); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	nextTag := ib.Tag
@@ -298,6 +320,11 @@ func (a *App) updateInbound(c *gin.Context) {
 	}
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if req.SubscriptionPort != nil && ib.Tag == previous.Tag && ib.ListenPort == previous.ListenPort &&
+		ib.Enabled == previous.Enabled && bytes.Equal(ib.Settings, previous.Settings) {
+		c.JSON(http.StatusOK, gin.H{"inbound": ib})
 		return
 	}
 	a.stageConfigAndRespond(c, sid, gin.H{"inbound": ib})

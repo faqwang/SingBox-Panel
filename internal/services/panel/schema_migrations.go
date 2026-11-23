@@ -461,6 +461,16 @@ var applicationMigrations = []schemaMigration{
 		name:    "server log level and staged configuration revisions",
 		up:      func(tx *gorm.DB) error { return tx.AutoMigrate(&model.Server{}) },
 	},
+	{
+		version: 44,
+		name:    "optional inbound subscription connection port",
+		up: func(tx *gorm.DB) error {
+			if tx.Migrator().HasColumn(&model.Inbound{}, "SubscriptionPort") {
+				return nil
+			}
+			return tx.Migrator().AddColumn(&model.Inbound{}, "SubscriptionPort")
+		},
+	},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -523,6 +533,7 @@ var migrationReplaySafe = map[uint]bool{
 	41: true,  // AutoMigrate adds the config residual column
 	42: true,  // only initializes raw servers without an overlay, in a transaction
 	43: true,  // AutoMigrate adds server log_level and staged config revision columns
+	44: true,  // HasColumn-guarded ADD COLUMN for the subscription port
 }
 
 // dropRetiredCustomNodeSwitches removes the per-node and per-subscription

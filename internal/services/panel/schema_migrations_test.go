@@ -24,6 +24,11 @@ func TestInitDBRecordsSchemaVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pool, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
 	var rows []model.SchemaMigration
 	if err := db.Order("version").Find(&rows).Error; err != nil {
 		t.Fatal(err)
@@ -41,6 +46,38 @@ func TestInitDBRecordsSchemaVersion(t *testing.T) {
 	}
 	if _, err := os.Stat(databaseFile + ".backups"); !os.IsNotExist(err) {
 		t.Fatalf("fresh database should not create an upgrade backup: %v", err)
+	}
+}
+
+func TestInboundSubscriptionMigrationPreservesExistingInbounds(t *testing.T) {
+	db := testDB(t)
+	inbound := model.Inbound{Tag: "existing", Type: model.InboundSocks, ListenPort: 1080, Enabled: true}
+	mustCreate(t, db, &inbound)
+	if err := db.Exec("ALTER TABLE inbounds DROP COLUMN subscription_port").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.SchemaMigration{}); err != nil {
+		t.Fatal(err)
+	}
+	var applied []model.SchemaMigration
+	for _, migration := range applicationMigrations {
+		if migration.version < 44 {
+			applied = append(applied, model.SchemaMigration{Version: migration.version, Name: migration.name, AppliedAt: time.Now()})
+		}
+	}
+	mustCreate(t, db, &applied)
+	if err := runSchemaMigrations(db, config.DatabaseConfig{Driver: "sqlite", SkipMigrationBackup: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !db.Migrator().HasColumn(&model.Inbound{}, "SubscriptionPort") {
+		t.Fatal("migration did not add the subscription port column")
+	}
+	var upgraded model.Inbound
+	if err := db.First(&upgraded, inbound.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if upgraded.Tag != inbound.Tag || upgraded.SubscriptionPort != 0 || upgraded.EffectiveSubscriptionPort() != inbound.ListenPort {
+		t.Fatalf("existing inbound lost its default port: %+v", upgraded)
 	}
 }
 

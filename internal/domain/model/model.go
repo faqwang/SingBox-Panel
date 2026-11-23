@@ -297,8 +297,18 @@ type Inbound struct {
 	Settings   JSONText    `gorm:"type:text" json:"settings"`
 	Remark     string      `gorm:"size:255" json:"remark"`
 
+	SubscriptionPort int `gorm:"not null;default:0" json:"subscription_port,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// EffectiveSubscriptionPort resolves the port advertised to subscribers.
+func (ib Inbound) EffectiveSubscriptionPort() int {
+	if ib.SubscriptionPort > 0 {
+		return ib.SubscriptionPort
+	}
+	return ib.ListenPort
 }
 
 // Outbounds imported from another node of the panel keep a reference to their

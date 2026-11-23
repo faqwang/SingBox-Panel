@@ -257,10 +257,11 @@ export const applyRawConfig = (id: number, config: string) =>
   http.post<{ ok: boolean; output: string; summary: ImportSummary; config_mode: 'managed' | 'raw'; warnings?: string[] }>(`/api/admin/servers/${id}/apply-raw`, { config }).then((r) => r.data)
 
 // ---- admin: inbounds ----
-interface InboundBody {
+export interface InboundBody {
   type: InboundType
   tag?: string
   listen_port: number
+  subscription_port?: number
   settings?: InboundSettings
   remark?: string
   enabled?: boolean
@@ -268,7 +269,7 @@ interface InboundBody {
 export const createInbound = (serverId: number, body: InboundBody) =>
   http.post<{ inbound: Inbound } & ConfigApplyResult>(`/api/admin/servers/${serverId}/inbounds`, body).then((r) => r.data)
 export const updateInbound = (serverId: number, inboundId: number, body: InboundBody) =>
-  http.put<{ inbound: Inbound } & ConfigApplyResult>(`/api/admin/servers/${serverId}/inbounds/${inboundId}`, body).then((r) => r.data)
+  http.put<{ inbound: Inbound } & Partial<ConfigApplyResult>>(`/api/admin/servers/${serverId}/inbounds/${inboundId}`, body).then((r) => r.data)
 export const deleteInbound = (serverId: number, inboundId: number) =>
   http.delete<ConfigApplyResult>(`/api/admin/servers/${serverId}/inbounds/${inboundId}`).then((r) => r.data)
 

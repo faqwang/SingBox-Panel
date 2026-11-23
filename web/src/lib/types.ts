@@ -358,6 +358,7 @@ export interface Inbound {
   tag: string
   type: InboundType
   listen_port: number
+  subscription_port?: number
   enabled: boolean
   settings: InboundSettings
   remark: string

@@ -22,7 +22,7 @@ func TestUserForwardAPIOnlyAcceptsOwnPrivateOutbound(t *testing.T) {
 	mustCreate(t, db, &user)
 	other := model.User{Email: "bob", Role: model.RoleUser, Enabled: true, ServerIDs: []uint{server.ID}, SubToken: "bob", ProxyToken: "bob-proxy"}
 	mustCreate(t, db, &other)
-	inbound := model.Inbound{ServerID: server.ID, Tag: "multi-in", Type: model.InboundVLESS, ListenPort: 443, Enabled: true, Settings: model.JSONText(`{"multi_user":true}`)}
+	inbound := model.Inbound{ServerID: server.ID, Tag: "multi-in", Type: model.InboundVLESS, ListenPort: 443, SubscriptionPort: 8443, Enabled: true, Settings: model.JSONText(`{"multi_user":true}`)}
 	mustCreate(t, db, &inbound)
 	outbound := model.Outbound{ServerID: 0, OwnerUserID: user.ID, Tag: "alice-home", Type: "vless", Settings: model.JSONText(`{"server":"home.example","server_port":443,"uuid":"11111111-2222-4333-8444-555555555555"}`)}
 	mustCreate(t, db, &outbound)
@@ -76,6 +76,9 @@ func TestUserForwardAPIOnlyAcceptsOwnPrivateOutbound(t *testing.T) {
 	}
 	if len(nodes) != 2 {
 		t.Fatalf("derived subscription nodes = %d, want original + forward", len(nodes))
+	}
+	if nodes[0].Port != 8443 || nodes[1].Port != 8443 {
+		t.Fatalf("original and derived node ports = %d, %d; want 8443", nodes[0].Port, nodes[1].Port)
 	}
 	if nodes[0].Params["UUID"] == nodes[1].Params["UUID"] {
 		t.Fatal("derived node reused the original node credentials")

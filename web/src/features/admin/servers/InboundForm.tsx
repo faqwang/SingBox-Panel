@@ -3,7 +3,7 @@ import { EditorModeToggle } from '../../../components/EditorModeToggle'
 import { JsonCodeEditor } from '../../../components/JsonCodeEditor'
 import { SchemaFieldList } from '../../../components/SchemaFormFields'
 import { Alert, Button, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch, type FormInstance } from '../../../components/kit'
-import { createInbound, updateInbound } from '../../../lib/api'
+import { createInbound, updateInbound, type InboundBody } from '../../../lib/api'
 import { applyWithToast } from '../../../lib/configApply'
 import {
   cloneJson,
@@ -462,7 +462,7 @@ export default function InboundForm({
   inbound: Inbound | null
   prefill?: Record<string, any>
   preview?: boolean
-  onPreview?: (body: Record<string, unknown>) => void
+  onPreview?: (body: InboundBody) => void
   open: boolean
   onClose: () => void
   onSaved: () => void
@@ -562,7 +562,10 @@ export default function InboundForm({
     // and without a reset those survive from the previously opened inbound —
     // 新增协议 would inherit the last one's tag and secrets.
     form.resetFields()
-    form.setFieldsValue(prefill ?? toForm(inbound))
+    form.setFieldsValue({
+      ...(prefill ?? toForm(inbound)),
+      subscription_port: inbound?.subscription_port || null,
+    })
     const initialRaw = cloneJson((inbound?.settings?.raw ?? {}) as Record<string, unknown>)
     setRawExtra(initialRaw)
     setEditorMode('form')
@@ -649,13 +652,9 @@ export default function InboundForm({
     const session = submitSessionRef.current
     setSubmitting(true)
     try {
-      let body: {
-        type: InboundType
-        tag: string
-        listen_port: number
-        enabled: boolean
-        settings: InboundSettings
-      }
+      const v = await readValues()
+      if (session !== submitSessionRef.current) return
+      let body: InboundBody
       if (editorMode === 'json') {
         setJsonError('')
         let parsed: Record<string, unknown>
@@ -675,7 +674,7 @@ export default function InboundForm({
           return
         }
         const nextType = (typeof parsed.type === 'string' && TYPES.some((t) => t.value === parsed.type) ? parsed.type : type) as InboundType
-        const prevSettings = assembleSettings(inbound?.settings || {}, form.getFieldsValue() as FormVals, nextType, rawExtra)
+        const prevSettings = assembleSettings(inbound?.settings || {}, v, nextType, rawExtra)
         const nextSettings = nativeJsonToInboundSettings(prevSettings, parsed)
         body = {
           type: nextType,
@@ -685,8 +684,6 @@ export default function InboundForm({
           settings: nextSettings,
         }
       } else {
-        const v = await readValues()
-        if (session !== submitSessionRef.current) return
         const settings = assembleSettings(inbound?.settings || {}, v, v.type, rawExtra)
         // An auto port must not land on the loopback port the guard reserved.
         const guardPort = settings.tls?.reality?.guard?.internal_port
@@ -708,9 +705,15 @@ export default function InboundForm({
         onPreview?.(body)
         return
       }
+      const subscriptionPort = v.subscription_port ?? 0
+      if (body.type !== 'tun' && subscriptionPort !== (inbound?.subscription_port ?? 0)) {
+        body.subscription_port = subscriptionPort
+      }
       const editing = inbound
-      const saved = await applyWithToast(`inbound-${editing ? editing.id : 'new'}`, () =>
-        editing ? updateInbound(serverId, editing.id, body) : createInbound(serverId, body),
+      const saved = await applyWithToast(
+        `inbound-${editing ? editing.id : 'new'}`,
+        () => editing ? updateInbound(serverId, editing.id, body) : createInbound(serverId, body),
+        '正在保存入站',
       )
       if (!saved || session !== submitSessionRef.current) return
       onClose()
@@ -731,6 +734,11 @@ export default function InboundForm({
   const jsonField = (key: string, value: unknown) => {
     if (form.getFieldValue(key) === undefined) form.setFieldValue(key, value)
   }
+  const subscriptionPortField = !preview && type !== 'tun' && (
+    <Form.Item name="subscription_port" label="订阅连接端口">
+      <InputNumber precision={0} min={1} max={65535} className="mono" placeholder="留空使用监听端口" />
+    </Form.Item>
+  )
 
   return (
     <Modal
@@ -753,21 +761,24 @@ export default function InboundForm({
           disabled={submitting}
         />
       </div>
+      <Form form={form} layout="vertical" className="fm-form inbound-compact-form">
       {editorMode === 'json' ? (
-        <div className="space-y-3">
-          {jsonError && <Alert type="error" showIcon message={jsonError} />}
-          <JsonCodeEditor
-            ariaLabel="inbound.json"
-            value={jsonText}
-            disabled={submitting}
-            onChange={(val) => {
-              setJsonText(val)
-              if (jsonError) setJsonError('')
-            }}
-          />
+        <div className="fm-grid">
+          {subscriptionPortField}
+          <div className="fm-full space-y-3">
+            {jsonError && <Alert type="error" showIcon message={jsonError} />}
+            <JsonCodeEditor
+              ariaLabel="inbound.json"
+              value={jsonText}
+              disabled={submitting}
+              onChange={(val) => {
+                setJsonText(val)
+                if (jsonError) setJsonError('')
+              }}
+            />
+          </div>
         </div>
       ) : (
-      <Form form={form} layout="vertical" className="fm-form inbound-compact-form">
         <div className="fm-grid" data-panel="inbound">
           <Form.Item name="type" label="协议" rules={[{ required: true }]} className="inbound-compact-type">
             <Select
@@ -808,11 +819,12 @@ export default function InboundForm({
                   ...(ipv6Available ? [{ value: 'ipv6', label: 'IPv6' }] : []),
                 ]} placeholder={listenMode === 'ipv6' ? 'IPv6 不可用' : undefined} />
               </Form.Item>
-              <Form.Item name="listen_port" label="端口">
+              <Form.Item name="listen_port" label="监听端口">
                 <InputNumber precision={0} min={1} max={65535} className="mono" />
               </Form.Item>
             </>
           )}
+          {subscriptionPortField}
           <Form.Item name="tag" label="标签">
             <Input />
           </Form.Item>
@@ -1373,8 +1385,8 @@ export default function InboundForm({
             />
           )}
         </div>
-      </Form>
       )}
+      </Form>
       </fieldset>
     </Modal>
   )

@@ -230,7 +230,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
         name: inbound.tag || nodeTypeLabel[inbound.type] || inbound.type,
         serverId: server.id,
         serverName: server.name,
-        detail: `${inboundConnectionHost(server, inbound.settings) || '-'}:${inbound.listen_port}`,
+        detail: `${inboundConnectionHost(server, inbound.settings) || '-'}:${inbound.subscription_port || inbound.listen_port}`,
         protocol: inbound.type,
         enabled: inbound.enabled,
       })),
